@@ -1,0 +1,150 @@
+/* Hide default Streamlit sidebar */
+[data-testid="stSidebar"] {
+    display: none;
+}
+
+/* Main background */
+body {
+    background-color: #f0f4f8;
+}
+
+/* Hero section - distinct background */
+.hero-section {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #3b82f6 100%);
+    color: white;
+    padding: 2rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 14px rgba(30, 58, 95, 0.25);
+}
+
+.hero-section h1, .hero-section h2 {
+    color: white !important;
+}
+
+/* Typography scale */
+h1 { font-size: 1.75rem; color: #0f172a; font-weight: 700; }
+h2, h3 { font-size: 1.25rem; color: #1e293b; font-weight: 600; }
+p, .stMarkdown { font-size: 1rem; }
+.section-title { font-size: 1.25rem; color: #1e293b; font-weight: 600; margin-bottom: 1rem; }
+
+/* Hero subline and CTA */
+.hero-subline { font-size: 1.1rem; margin-top: 0.5rem; margin-bottom: 1rem; color: rgba(255,255,255,0.95); }
+.hero-cta { margin-top: 0.5rem; }
+.hero-cta-btn {
+    display: inline-block;
+    background: white;
+    color: #1e3a5f !important;
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    font-weight: 600;
+    text-decoration: none;
+}
+.hero-cta-btn:hover { opacity: 0.95; text-decoration: none; color: #1e3a5f; }
+
+/* CTA success box (inline Upload & Clean link) */
+.cta-success {
+    background: #d1fae5;
+    color: #065f46;
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    margin: 1rem 0;
+    font-size: 1rem;
+}
+.cta-inline-link { color: #2563eb !important; font-weight: 700; text-decoration: none; }
+.cta-inline-link:hover { text-decoration: underline; color: #1d4ed8 !important; }
+
+/* Trust strip */
+.trust-strip {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+    color: #475569;
+}
+.trust-strip p { margin: 0.25rem 0; }
+.trust-help { margin-top: 0.5rem !important; }
+.trust-help a { color: #2563eb; }
+.trust-help a:hover { text-decoration: underline; }
+
+/* Feature cards / sections */
+.feature-card {
+    background: white;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-left: 4px solid #2563eb;
+}
+
+/* Accent colors for key elements */
+.stMarkdown h1 {
+    color: #1e3a5f;
+}
+
+.stMarkdown a {
+    color: #2563eb;
+}
+
+/* Button styling */
+button {
+    border-radius: 8px !important;
+    padding: 10px 18px !important;
+}
+
+.stButton > button[kind="primary"] {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+/* Upload box styling */
+[data-testid="stFileUploader"] {
+    border: 2px dashed #94a3b8;
+    padding: 20px;
+    border-radius: 10px;
+    background-color: #ffffff;
+}
+
+/* Progress spinner */
+.stSpinner > div {
+    color: #2563eb;
+}
+
+/* Info / success / warning boxes */
+.stAlert {
+    border-radius: 10px;
+}
+
+/* Top nav area - subtle bar */
+[data-testid="stVerticalBlock"] > div:first-child {
+    margin-bottom: 0.5rem;
+}
+
+/* Tab-like nav button (Chrome style) */
+.nav-tab-btn .stButton > button {
+    border-radius: 8px 8px 0 0 !important;
+    border: 1px solid #dadce0 !important;
+    border-bottom: none !important;
+    background: #f8f9fa !important;
+    color: #1f1f1f !important;
+    font-size: 0.875rem !important;
+    padding: 8px 16px !important;
+    box-shadow: 0 -1px 2px rgba(0,0,0,0.05) !important;
+}
+.nav-tab-btn .stButton > button:hover {
+    background: #e8eaed !important;
+}
+
+/* Logo as link */
+.nav-logo-link {
+    display: inline-block;
+    cursor: pointer;
+}
+.nav-logo-link:hover {
+    opacity: 0.9;
+}
+.nav-logo-link img {
+    display: block;
+}

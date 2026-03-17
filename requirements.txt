@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+numpy
+networkx
+python-dateutil
+razorpay
+gspread
+google-auth
