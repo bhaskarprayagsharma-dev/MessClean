@@ -33,9 +33,22 @@ When users choose “Fill feedback to download”, their responses are appended 
 1. Create a Google Cloud project and enable the **Google Sheets API**.
 2. Create a **service account** and download its JSON key. Put the key file somewhere safe (e.g. project root or a secrets folder).
 3. Create a Google Sheet and share it with the **service account email** (from the JSON key, e.g. `xxx@yyy.iam.gserviceaccount.com`) with “Editor” access.
-4. Copy the **Sheet ID** from the sheet URL: `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`.
-5. Set environment variables (or use `.streamlit/secrets.toml` for local dev):
-   - **GOOGLE_SHEETS_CREDENTIALS_JSON** — path to the service account JSON file.
+4. Copy the **Sheet ID** from the sheet URL: `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`. (The app defaults to the MessClean Feedback sheet if you don’t set this.)
+5. In Streamlit Community Cloud, set **Secrets** (recommended):
+   - **FEEDBACK_SHEET_ID** — optional; if omitted, the default MessClean Feedback sheet is used.
+   - **GOOGLE_SERVICE_ACCOUNT_JSON** — paste the entire service account JSON contents (use triple quotes in secrets).
+
+   Example:
+
+   ```toml
+   FEEDBACK_SHEET_ID = "YOUR_SHEET_ID"
+   GOOGLE_SERVICE_ACCOUNT_JSON = """
+   { ...service account json... }
+   """
+   ```
+
+   Local dev alternative:
+   - **GOOGLE_SHEETS_CREDENTIALS_JSON** — file path to the service account JSON (on your machine).
    - **FEEDBACK_SHEET_ID** — the Sheet ID from step 4.
 
 If these are not set, feedback is still collected and stored in **data/feedback.json**.

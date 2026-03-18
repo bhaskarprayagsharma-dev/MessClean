@@ -5,16 +5,21 @@ so the download button can be shown.
 
 Setup (document in README):
 - Create a Google Sheet. Share it with the service account email (if using service account).
-- Set env: GOOGLE_SHEETS_CREDENTIALS_JSON (path to service account JSON) or use gspread with OAuth.
-- Set env: FEEDBACK_SHEET_ID (the ID from the sheet URL: .../d/SHEET_ID/...).
+- Recommended (Streamlit Cloud): set secret GOOGLE_SERVICE_ACCOUNT_JSON to the JSON contents (triple-quoted).
+- Alternative: set env GOOGLE_SHEETS_CREDENTIALS_JSON to a service account JSON file path (local dev).
+- Set secret or env FEEDBACK_SHEET_ID to override; otherwise the default MessClean Feedback sheet is used.
 - pip install gspread google-auth.
 """
 import os
 import streamlit as st
 from pathlib import Path
+import json
 
 # Optional: store feedback locally if Google Sheet not configured
 FEEDBACK_FILE = Path(__file__).resolve().parent.parent / "data" / "feedback.json"
+
+# Default MessClean Feedback sheet (used when FEEDBACK_SHEET_ID is not in secrets/env)
+FEEDBACK_SHEET_ID_DEFAULT = "10RTSuq4RGVy0CBN3Fmxi2gzUqafalJrvkfH7NdbyiMI"
 
 
 def _ensure_data_dir():
@@ -55,15 +60,29 @@ def append_feedback_to_sheet(
         "upgrades": ",".join(upgrades) if upgrades else "",
     }
 
-    sheet_id = os.environ.get("FEEDBACK_SHEET_ID", "").strip()
+    # Prefer Streamlit secrets (works on Streamlit Cloud)
+    sheet_id = ""
+    service_account_json = ""
+    try:
+        sheet_id = str(st.secrets.get("FEEDBACK_SHEET_ID", "")).strip()
+        service_account_json = str(st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")).strip()
+    except Exception:
+        pass
+
+    # Fall back to env vars (useful for local dev), then to default MessClean sheet
+    if not sheet_id:
+        sheet_id = os.environ.get("FEEDBACK_SHEET_ID", "").strip()
+    if not sheet_id:
+        sheet_id = FEEDBACK_SHEET_ID_DEFAULT
     creds_path = os.environ.get("GOOGLE_SHEETS_CREDENTIALS_JSON", "").strip()
 
-    if sheet_id and creds_path and os.path.isfile(creds_path):
+    if sheet_id and service_account_json:
         try:
             import gspread
             from google.oauth2.service_account import Credentials
             scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-            creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+            info = json.loads(service_account_json)
+            creds = Credentials.from_service_account_info(info, scopes=scopes)
             gc = gspread.authorize(creds)
             sh = gc.open_by_key(sheet_id)
             # Use first worksheet
@@ -73,6 +92,21 @@ def append_feedback_to_sheet(
         except Exception as e:
             _append_feedback_local(row)
             return True, ""  # still succeed so user can download; data is in local file
+    elif sheet_id and creds_path and os.path.isfile(creds_path):
+        # Local dev fallback: use a JSON file path from env
+        try:
+            import gspread
+            from google.oauth2.service_account import Credentials
+            scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+            creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+            gc = gspread.authorize(creds)
+            sh = gc.open_by_key(sheet_id)
+            ws = sh.sheet1
+            ws.append_row([row.get("name", ""), row.get("occupation", ""), row.get("country", ""), row.get("upgrades", ""), row.get("free_text", "")])
+            return True, ""
+        except Exception:
+            _append_feedback_local(row)
+            return True, ""
     else:
         _append_feedback_local(row)
         return True, ""
@@ -113,7 +147,6 @@ def render_feedback_form_for_download(cleaned_df, metadata, reports, file_name: 
     st.markdown("Complete the form below (required fields) and click **Submit & Download**.")
 
     with st.form("feedback_for_download"):
-        free_text = st.text_area("Anything else? (optional)", key="fb_free")
         name = st.text_input("Name (optional)", key="fb_name")
         occupation = st.text_input("What do you do? (required)", key="fb_occupation")
         country = st.text_input("Where are you based? (required)", key="fb_country")
@@ -122,6 +155,7 @@ def render_feedback_form_for_download(cleaned_df, metadata, reports, file_name: 
             UPGRADE_OPTIONS,
             key="fb_upgrades",
         )
+        free_text = st.text_area("Anything else? (optional)", key="fb_free")
         submitted = st.form_submit_button("Submit & Download")
 
     if submitted:
