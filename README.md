@@ -75,6 +75,8 @@ The app uses OAuth 2.0 with a callback on the **main page** (`app.py`), then sen
 
 The OAuth `state` parameter is **HMAC-signed** with your client secret so sign-in still works after Google redirects back (Streamlit sessions are often reset on that redirect).
 
+**PKCE** is turned off for this flow (`autogenerate_code_verifier=False`): the library would otherwise generate a new verifier on each `Flow`, and the token step would fail with `invalid_grant` / “Missing code verifier”.
+
 **Email sign-up** still works without OAuth; data is stored in **data/users.json**.
 
 ### “Doesn’t comply with OAuth 2.0 policy” / redirect URI errors

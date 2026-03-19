@@ -164,10 +164,13 @@ def handle_google_oauth_callback() -> bool:
         return True
 
     try:
+        # PKCE must be disabled: auth step and token step use different Flow
+        # instances; auto-PKCE loses the verifier and Google returns invalid_grant.
         flow = Flow.from_client_config(
             _client_config_web(cid, csec, redirect_uri),
             scopes=GOOGLE_OAUTH_SCOPES,
             redirect_uri=redirect_uri,
+            autogenerate_code_verifier=False,
         )
         flow.fetch_token(code=code)
         creds = flow.credentials
@@ -207,6 +210,7 @@ def _google_authorization_url() -> str | None:
         _client_config_web(cid, csec, redirect_uri),
         scopes=GOOGLE_OAUTH_SCOPES,
         redirect_uri=redirect_uri,
+        autogenerate_code_verifier=False,
     )
     authorization_url, _ = flow.authorization_url(
         access_type="online",
