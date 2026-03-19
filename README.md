@@ -73,7 +73,20 @@ The app uses OAuth 2.0 with a callback on the **main page** (`app.py`), then sen
 
 6. Dependency: `google-auth-oauthlib` (see `requirements.txt`).
 
+The OAuth `state` parameter is **HMAC-signed** with your client secret so sign-in still works after Google redirects back (Streamlit sessions are often reset on that redirect).
+
 **Email sign-up** still works without OAuth; data is stored in **data/users.json**.
+
+### “Doesn’t comply with OAuth 2.0 policy” / redirect URI errors
+
+Google shows `redirect_uri=https://…` in the error. That string must appear under **the same** OAuth **Web client** as your `GOOGLE_CLIENT_ID`:
+
+1. **Credentials** → open that OAuth client (not a different client).
+2. **Authorized redirect URIs** → **Add URI** → paste the URI **character-for-character** (including `https` and optional trailing `/`).
+3. **Authorized JavaScript origins** → add `https://YOUR-APP.streamlit.app` (no path).
+4. **Save** and wait a minute.
+
+If it still fails, add **both** `https://YOUR-APP.streamlit.app` and `https://YOUR-APP.streamlit.app/` under redirect URIs. Ensure Streamlit `GOOGLE_OAUTH_REDIRECT_URI` matches **one** of those entries exactly.
 
 ## Before launch
 

@@ -4,7 +4,13 @@ Sign-in / Sign-up gate (soft gate). Options:
 - Continue with email: name, age, country, email (no password). Stored in data/users.json.
 
 OAuth callback is handled on the main page (app.py) because the redirect URI must match one URL.
+
+OAuth `state` is HMAC-signed with the client secret so we can verify the callback after Google
+redirects back — Streamlit often does not keep session_state across that round trip.
 """
+import base64
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -80,6 +86,33 @@ def _clear_oauth_query_params():
             pass
 
 
+def _make_signed_oauth_state(client_secret: str) -> str:
+    """Random nonce + HMAC so callback can be verified without Streamlit session_state."""
+    nonce = secrets.token_urlsafe(24)
+    sig = hmac.new(
+        client_secret.encode("utf-8"),
+        nonce.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    sig_b64 = base64.urlsafe_b64encode(sig).decode("ascii").rstrip("=")
+    return f"{nonce}.{sig_b64}"
+
+
+def _verify_signed_oauth_state(state_q: str, client_secret: str) -> bool:
+    if not state_q or "." not in state_q:
+        return False
+    nonce, sig_b64 = state_q.rsplit(".", 1)
+    if not nonce or not sig_b64:
+        return False
+    expected = hmac.new(
+        client_secret.encode("utf-8"),
+        nonce.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    expected_b64 = base64.urlsafe_b64encode(expected).decode("ascii").rstrip("=")
+    return hmac.compare_digest(sig_b64, expected_b64)
+
+
 def _fetch_userinfo(access_token: str) -> dict:
     req = urllib.request.Request(
         "https://www.googleapis.com/oauth2/v2/userinfo",
@@ -121,17 +154,16 @@ def handle_google_oauth_callback() -> bool:
 
     _, _, redirect_uri = cfg
     state_q = _qp_first("state") or ""
-    expected = st.session_state.get("oauth_state")
-    if not expected or state_q != expected:
+    cid, csec, _ = cfg
+    if not _verify_signed_oauth_state(state_q, csec):
         st.error(
-            "Sign-in couldn’t complete (session expired or invalid). "
+            "Sign-in couldn’t complete (invalid or expired link). "
             "Open **Upload & Clean** and click **Sign in with Google** again."
         )
         _clear_oauth_query_params()
         return True
 
     try:
-        cid, csec, _ = cfg
         flow = Flow.from_client_config(
             _client_config_web(cid, csec, redirect_uri),
             scopes=GOOGLE_OAUTH_SCOPES,
@@ -153,7 +185,6 @@ def handle_google_oauth_callback() -> bool:
         st.session_state.user_email = email
         if name:
             st.session_state.user_name_google = name
-        st.session_state.pop("oauth_state", None)
         _clear_oauth_query_params()
         st.switch_page("pages/1_Upload_and_Clean.py")
     except Exception as exc:
@@ -171,8 +202,7 @@ def _google_authorization_url() -> str | None:
     except ImportError:
         return None
     cid, csec, redirect_uri = cfg
-    state = secrets.token_urlsafe(32)
-    st.session_state["oauth_state"] = state
+    state = _make_signed_oauth_state(csec)
     flow = Flow.from_client_config(
         _client_config_web(cid, csec, redirect_uri),
         scopes=GOOGLE_OAUTH_SCOPES,
@@ -231,14 +261,30 @@ def render_login_gate():
     with tab1:
         auth_url = _google_authorization_url()
         if auth_url:
+            cfg = get_google_oauth_config()
+            redirect_exact = cfg[2] if cfg else ""
             st.markdown(
                 "Sign in with your Google account. You’ll return here after Google confirms your email."
             )
             st.link_button("Sign in with Google", auth_url, use_container_width=True, type="primary")
             st.caption(
-                f"Redirect URI must be set in Google Cloud to: `{_secrets_or_env('GOOGLE_OAUTH_REDIRECT_URI') or '(your app root URL)'}`. "
-                "Use the **exact** same value in Streamlit secrets as `GOOGLE_OAUTH_REDIRECT_URI`."
+                "If Google says the app doesn’t comply with OAuth policy, the **redirect URI** is missing or wrong "
+                "for this Client ID — fix it in Google Cloud (see below)."
             )
+            with st.expander("Google Cloud: register this redirect URI (required)"):
+                st.markdown(
+                    "1. Open [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**.\n"
+                    "2. Click your **OAuth 2.0 Client ID** (the same one as `GOOGLE_CLIENT_ID` in Streamlit secrets).\n"
+                    "3. Under **Authorized redirect URIs**, click **+ ADD URI**.\n"
+                    "4. Paste **exactly** this (copy from the box — trailing `/` matters):"
+                )
+                st.code(redirect_exact or _secrets_or_env("GOOGLE_OAUTH_REDIRECT_URI"), language=None)
+                st.markdown(
+                    "5. Under **Authorized JavaScript origins**, add the same host **without** path, e.g. "
+                    "`https://messclean-bhaskar.streamlit.app` (no trailing slash).\n"
+                    "6. **Save**. Wait 1–2 minutes, then try again.\n\n"
+                    "**Tip:** Add **both** `https://…streamlit.app` and `https://…streamlit.app/` if unsure which Google expects."
+                )
         else:
             st.info(
                 "Add **GOOGLE_CLIENT_ID**, **GOOGLE_CLIENT_SECRET**, and **GOOGLE_OAUTH_REDIRECT_URI** "
