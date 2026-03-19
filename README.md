@@ -53,17 +53,27 @@ When users choose “Fill feedback to download”, their responses are appended 
 
 If these are not set, feedback is still collected and stored in **data/feedback.json**.
 
-## Google OAuth setup (optional – “Continue with Google”)
+## Google OAuth (“Continue with Google”)
 
-Sign-in with Google is optional for MVP. To enable it:
+The app uses OAuth 2.0 with a callback on the **main page** (`app.py`), then sends the user to **Upload & Clean**.
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), create OAuth 2.0 credentials (Web application).
-2. Add the **authorized redirect URI**: your app URL (e.g. `https://your-app.onstreamlit.app/` for Streamlit Cloud).
-3. Set environment variables:
-   - **GOOGLE_CLIENT_ID** — OAuth client ID
-   - **GOOGLE_CLIENT_SECRET** — OAuth client secret
+1. In [Google Cloud Console](https://console.cloud.google.com/), **OAuth consent screen** (External) + **Test users** while in testing.
+2. **Credentials** → OAuth **Web application** client.
+3. **Authorized JavaScript origins**: `https://YOUR-APP.streamlit.app` (no path, no trailing slash).
+4. **Authorized redirect URIs**: **exactly** your app root, e.g. `https://YOUR-APP.streamlit.app/` (trailing slash must match what you put in secrets).
+5. In Streamlit **Secrets** (or env):
 
-The current code shows a “Continue with Google” tab; the actual OAuth redirect flow still needs to be implemented (e.g. with `streamlit-oauth` or a custom callback). Until then, users can use **Continue with email** (name, age, country, email); data is stored in **data/users.json**.
+   ```toml
+   GOOGLE_CLIENT_ID = "....apps.googleusercontent.com"
+   GOOGLE_CLIENT_SECRET = "GOCSPX-..."
+   GOOGLE_OAUTH_REDIRECT_URI = "https://YOUR-APP.streamlit.app/"
+   ```
+
+   `GOOGLE_OAUTH_REDIRECT_URI` must be **identical** to the redirect URI in Google Cloud (including `/` at the end if you use it).
+
+6. Dependency: `google-auth-oauthlib` (see `requirements.txt`).
+
+**Email sign-up** still works without OAuth; data is stored in **data/users.json**.
 
 ## Before launch
 

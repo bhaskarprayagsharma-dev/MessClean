@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+from utils.auth import handle_google_oauth_callback
 from utils.nav import render_top_nav
 
 st.set_page_config(
@@ -17,6 +18,10 @@ def load_css():
 
 
 load_css()
+
+# Google OAuth returns here (?code=...&state=...); must run before other home routing
+if handle_google_oauth_callback():
+    st.stop()
 
 # Inline "Upload & Clean" link: ?navigate=upload -> go to upload page
 if st.query_params.get("navigate") == "upload":

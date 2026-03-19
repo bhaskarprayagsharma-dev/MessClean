@@ -7,3 +7,4 @@ python-dateutil
 razorpay
 gspread
 google-auth
+google-auth-oauthlib

@@ -1,15 +1,190 @@
 """
 Sign-in / Sign-up gate (soft gate). Options:
-- Continue with Google (OAuth; requires GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirect URI).
+- Continue with Google (OAuth 2.0; GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI).
 - Continue with email: name, age, country, email (no password). Stored in data/users.json.
-Sets st.session_state.logged_in = True and optionally user info.
+
+OAuth callback is handled on the main page (app.py) because the redirect URI must match one URL.
 """
-import streamlit as st
 import json
 import os
+import secrets
+import urllib.error
+import urllib.request
 from pathlib import Path
 
+import streamlit as st
+
 USERS_FILE = Path(__file__).resolve().parent.parent / "data" / "users.json"
+
+GOOGLE_OAUTH_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+]
+
+
+def _secrets_or_env(key: str, default: str = "") -> str:
+    try:
+        v = st.secrets.get(key, default)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    except Exception:
+        pass
+    return os.environ.get(key, default).strip()
+
+
+def get_google_oauth_config():
+    """
+    Returns (client_id, client_secret, redirect_uri) or None if not fully configured.
+    redirect_uri must match Google Cloud Console exactly (including trailing slash).
+    """
+    client_id = _secrets_or_env("GOOGLE_CLIENT_ID")
+    client_secret = _secrets_or_env("GOOGLE_CLIENT_SECRET")
+    redirect_uri = _secrets_or_env("GOOGLE_OAUTH_REDIRECT_URI")
+    if not client_id or not client_secret or not redirect_uri:
+        return None
+    return (client_id, client_secret, redirect_uri)
+
+
+def _client_config_web(client_id: str, client_secret: str, redirect_uri: str) -> dict:
+    return {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+
+
+def _qp_first(key: str) -> str | None:
+    """Get a single query param value (Streamlit may return str or sequence)."""
+    try:
+        v = st.query_params.get(key)
+    except Exception:
+        return None
+    if v is None:
+        return None
+    if isinstance(v, (list, tuple)):
+        return str(v[0]) if v else None
+    return str(v) if v else None
+
+
+def _clear_oauth_query_params():
+    for key in ("code", "state", "scope", "error", "error_description"):
+        try:
+            if key in st.query_params:
+                del st.query_params[key]
+        except Exception:
+            pass
+
+
+def _fetch_userinfo(access_token: str) -> dict:
+    req = urllib.request.Request(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, json.JSONDecodeError):
+        return {}
+
+
+def handle_google_oauth_callback() -> bool:
+    """
+    Run on app.py every load. If URL has OAuth callback params, process and return True
+    (caller should st.stop() so the rest of the home page does not render).
+    """
+    cfg = get_google_oauth_config()
+    if not cfg:
+        return False
+
+    err = _qp_first("error")
+    if err:
+        st.error(f"Google sign-in was cancelled or failed ({err}).")
+        _clear_oauth_query_params()
+        return True
+
+    code = _qp_first("code")
+    if not code:
+        return False
+
+    try:
+        from google_auth_oauthlib.flow import Flow
+    except ImportError:
+        st.error("Missing package: install `google-auth-oauthlib` (see requirements.txt).")
+        _clear_oauth_query_params()
+        return True
+
+    _, _, redirect_uri = cfg
+    state_q = _qp_first("state") or ""
+    expected = st.session_state.get("oauth_state")
+    if not expected or state_q != expected:
+        st.error(
+            "Sign-in couldn’t complete (session expired or invalid). "
+            "Open **Upload & Clean** and click **Sign in with Google** again."
+        )
+        _clear_oauth_query_params()
+        return True
+
+    try:
+        cid, csec, _ = cfg
+        flow = Flow.from_client_config(
+            _client_config_web(cid, csec, redirect_uri),
+            scopes=GOOGLE_OAUTH_SCOPES,
+            redirect_uri=redirect_uri,
+        )
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        token = getattr(creds, "token", None)
+        if not token:
+            raise ValueError("No access token from Google")
+        info = _fetch_userinfo(token)
+        email = (info.get("email") or "").strip()
+        name = (info.get("name") or "").strip()
+        if not email:
+            st.error("Google did not return an email. Try another account or use **Continue with email**.")
+            _clear_oauth_query_params()
+            return True
+        st.session_state.logged_in = True
+        st.session_state.user_email = email
+        if name:
+            st.session_state.user_name_google = name
+        st.session_state.pop("oauth_state", None)
+        _clear_oauth_query_params()
+        st.switch_page("pages/1_Upload_and_Clean.py")
+    except Exception as exc:
+        st.error(f"Sign-in failed: {exc}")
+        _clear_oauth_query_params()
+    return True
+
+
+def _google_authorization_url() -> str | None:
+    cfg = get_google_oauth_config()
+    if not cfg:
+        return None
+    try:
+        from google_auth_oauthlib.flow import Flow
+    except ImportError:
+        return None
+    cid, csec, redirect_uri = cfg
+    state = secrets.token_urlsafe(32)
+    st.session_state["oauth_state"] = state
+    flow = Flow.from_client_config(
+        _client_config_web(cid, csec, redirect_uri),
+        scopes=GOOGLE_OAUTH_SCOPES,
+        redirect_uri=redirect_uri,
+    )
+    authorization_url, _ = flow.authorization_url(
+        access_type="online",
+        include_granted_scopes="true",
+        state=state,
+        prompt="select_account",
+    )
+    return authorization_url
 
 
 def _ensure_data_dir():
@@ -54,23 +229,21 @@ def render_login_gate():
     tab1, tab2 = st.tabs(["Continue with Google", "Continue with email"])
 
     with tab1:
-        st.markdown("""
-        **Google sign-in** will be available once you configure OAuth.
-
-        To enable:
-        1. Create a project in [Google Cloud Console](https://console.cloud.google.com/).
-        2. Enable the Google+ API (or Google Identity).
-        3. Create OAuth 2.0 credentials (Web application).
-        4. Add authorized redirect URI: `https://your-app-url/` (or Streamlit Cloud URL).
-        5. Set env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
-        """)
-        # Placeholder: when OAuth is implemented, check env and show "Sign in with Google" button
-        google_id = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
-        if google_id:
-            if st.button("Sign in with Google", key="google_signin"):
-                st.info("OAuth flow not yet implemented. Use 'Continue with email' for now.")
+        auth_url = _google_authorization_url()
+        if auth_url:
+            st.markdown(
+                "Sign in with your Google account. You’ll return here after Google confirms your email."
+            )
+            st.link_button("Sign in with Google", auth_url, use_container_width=True, type="primary")
+            st.caption(
+                f"Redirect URI must be set in Google Cloud to: `{_secrets_or_env('GOOGLE_OAUTH_REDIRECT_URI') or '(your app root URL)'}`. "
+                "Use the **exact** same value in Streamlit secrets as `GOOGLE_OAUTH_REDIRECT_URI`."
+            )
         else:
-            st.caption("Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable.")
+            st.info(
+                "Add **GOOGLE_CLIENT_ID**, **GOOGLE_CLIENT_SECRET**, and **GOOGLE_OAUTH_REDIRECT_URI** "
+                "to Streamlit secrets (or environment variables) to enable Google sign-in."
+            )
 
     with tab2:
         with st.form("email_signup"):
